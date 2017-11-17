@@ -4,6 +4,7 @@
 *.so
 *.dylib
 dnsbl_checker
+dnsbl_checker_*
 
 # Test binary, build with `go test -c`
 *.test
