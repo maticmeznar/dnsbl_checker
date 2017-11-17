@@ -3,6 +3,7 @@
 *.dll
 *.so
 *.dylib
+dnsbl_checker
 
 # Test binary, build with `go test -c`
 *.test
