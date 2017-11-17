@@ -4,7 +4,6 @@
 *.so
 *.dylib
 dnsbl_checker
-dnsbl_checker_*
 
 # Test binary, build with `go test -c`
 *.test
@@ -14,3 +13,6 @@ dnsbl_checker_*
 
 # Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
 .glide/
+
+# Directory containing executables and ZIPs for various platforms
+dist/
