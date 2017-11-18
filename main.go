@@ -17,6 +17,7 @@ var (
 	app          = kingpin.New("dnsbl_checker", "All-in-one DNSBL checker written in Go using every publicly known DNSBL.")
 	ip4Cmd       = app.Command("ip", "checks IPv4 address against DNSBLs")
 	cfgWhitelist = app.Flag("whitelist", "Check whitelists instead of blacklists").Bool()
+	cfgVerbose   = app.Flag("verbose", "More verbose output. Output will include misses, timeouts and failures.").Bool()
 	cfgExclude   = app.Flag("exclude", "List of DNSBLs to exclude from the check. This flag can be specified multiple times.").PlaceHolder("bl.example.com").Strings()
 	cfgSpeed     = app.Flag("speed", "number of checks per second between 1 (min) and 1000 (max)").Default("20").Int()
 	cfgIP4       = ip4Cmd.Arg("ip", "IP address to check").Required().String()
@@ -145,7 +146,10 @@ func lookupDomain(domain string, list *ListItem) (bool, error) {
 
 func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListItem) (bool, error)) {
 	wg := sync.WaitGroup{}
-	counterBad := make(chan bool, len(lists))
+	counterHits := make(chan bool, len(lists))
+	counterMisses := make(chan bool, len(lists))
+	counterTimeouts := make(chan bool, len(lists))
+	counterFailures := make(chan bool, len(lists))
 	counterChecks := 0
 
 	sleep := 1000 / *cfgSpeed
@@ -160,21 +164,36 @@ func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListI
 		counterChecks++
 		go func(address string, v *ListItem) {
 			<-ticker
-			result, _ := lookupFunc(address, v)
+			result, err := lookupFunc(address, v)
+			if err != nil {
+				var out string
+				if strings.HasSuffix(err.Error(), "no such host") {
+					out = fmt.Sprintf("%v : MISS\n", v.Address)
+					counterMisses <- true
+				} else if strings.HasSuffix(err.Error(), "i/o timeout") {
+					out = fmt.Sprintf("%v : TIMEOUT\n", v.Address)
+					counterTimeouts <- true
+				} else {
+					out = fmt.Sprintf("%v : FAILURE\n", v.Address)
+					counterFailures <- true
+				}
+				if *cfgVerbose {
+					fmt.Printf("%v", out)
+				}
+			}
 			if result {
-				fmt.Printf("%v is listed in %v\n", address, v.Address)
-				// spew.Dump(v)
-				counterBad <- true
+				fmt.Printf("%v : HIT\n", v.Address)
+				counterHits <- true
 			}
 			wg.Done()
 		}(address, v)
 	}
 
 	wg.Wait()
-	numListed := len(counterBad)
+	numListed := len(counterHits)
 
 	fmt.Printf("------------------------------------------------\n")
-	fmt.Printf("Result: %v checks performed. %v is listed %v times.\n", counterChecks, address, numListed)
+	fmt.Printf("Result: %v checks performed. %v hits, %v misses, %v timeouts, %v failures\n", counterChecks, len(counterHits), len(counterMisses), len(counterTimeouts), len(counterFailures))
 
 	if numListed > 0 && !*cfgWhitelist {
 		os.Exit(2)

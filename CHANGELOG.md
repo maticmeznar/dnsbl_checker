@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [Unreleased]
 ### Changed
 - Renamed 'ip4' command to 'ip'
-- Rate of checks per second can now be controlled with `--speed` flag.
+- Rate of checks per second can now be set with `--speed` flag.
+- More verbose output can now be enabled with `--verbose` flag.
 
 ## [0.1] - 2017-11-17
 ### Added
