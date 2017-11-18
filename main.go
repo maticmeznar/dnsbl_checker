@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	valid "github.com/asaskevich/govalidator"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -16,6 +18,7 @@ var (
 	ip4Cmd       = app.Command("ip", "checks IPv4 address against DNSBLs")
 	cfgWhitelist = app.Flag("whitelist", "Check whitelists instead of blacklists").Bool()
 	cfgExclude   = app.Flag("exclude", "List of DNSBLs to exclude from the check. This flag can be specified multiple times.").PlaceHolder("bl.example.com").Strings()
+	cfgSpeed     = app.Flag("speed", "number of checks per second between 1 (min) and 1000 (max)").Default("20").Int()
 	cfgIP4       = ip4Cmd.Arg("ip", "IP address to check").Required().String()
 	// ip6Cmd       = app.Command("ip6", "checks IPv6 address against DNSBLs")
 	// cfgIP6       = ip6Cmd.Arg("ip", "IP address to check").Required().String()
@@ -51,7 +54,7 @@ func main() {
 	allLists := parseCVS()
 	filteredLists := []*ListItem{}
 
-	// TODO: remove excluded lists
+	// create filteredLists by removing excluded lists from allLists
 	if len(*cfgExclude) >= 1 {
 		for _, vAll := range allLists {
 			if isStringInSlice(vAll.Address, *cfgExclude) {
@@ -145,10 +148,18 @@ func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListI
 	counterBad := make(chan bool, len(lists))
 	counterChecks := 0
 
+	sleep := 1000 / *cfgSpeed
+	d, err := time.ParseDuration(strconv.Itoa(sleep) + "ms")
+	if err != nil {
+		panic(err)
+	}
+	ticker := time.Tick(d)
+
 	for _, v := range lists {
 		wg.Add(1)
 		counterChecks++
 		go func(address string, v *ListItem) {
+			<-ticker
 			result, _ := lookupFunc(address, v)
 			if result {
 				fmt.Printf("%v is listed in %v\n", address, v.Address)
