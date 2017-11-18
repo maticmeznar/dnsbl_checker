@@ -16,3 +16,6 @@ dnsbl_checker
 
 # Directory containing executables and ZIPs for various platforms
 dist/
+
+# Vendoring dir
+vendor/
