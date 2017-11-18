@@ -13,7 +13,7 @@ import (
 
 var (
 	app          = kingpin.New("dnsbl_checker", "All-in-one DNSBL checker written in Go using every publicly known DNSBL.")
-	ip4Cmd       = app.Command("ip4", "checks IPv4 address against DNSBLs")
+	ip4Cmd       = app.Command("ip", "checks IPv4 address against DNSBLs")
 	cfgWhitelist = app.Flag("whitelist", "Check whitelists instead of blacklists").Bool()
 	cfgExclude   = app.Flag("exclude", "List of DNSBLs to exclude from the check. This flag can be specified multiple times.").PlaceHolder("bl.example.com").Strings()
 	cfgIP4       = ip4Cmd.Arg("ip", "IP address to check").Required().String()
