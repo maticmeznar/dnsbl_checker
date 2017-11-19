@@ -25,8 +25,7 @@ var (
 	// cfgIP6       = ip6Cmd.Arg("ip", "IP address to check").Required().String()
 	domainCmd = app.Command("domain", "checks a domain against DNSBLs")
 	cfgDomain = domainCmd.Arg("domain", "domain name to check").Required().String()
-	version   = "0.1"
-	author    = "Matic Mežnar <matic@meznar.si>"
+	version   = "0.2"
 )
 
 // ListItem is a struct with list details
@@ -49,7 +48,6 @@ type ListItem struct {
 
 func main() {
 	app.Version(version)
-	app.Author(author)
 
 	ks := kingpin.MustParse(app.Parse(os.Args[1:]))
 	allLists := parseCVS()
