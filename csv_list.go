@@ -7,7 +7,14 @@ import (
 	"strings"
 )
 
-var privateLists = []string{"blackholes.scconsult.com", "hartkore.dnsbl.tuxad.de", "dunk.dnsbl.tuxad.de"}
+var privateLists = []string{"(hidden)", "blackholes.scconsult.com", "hartkore.dnsbl.tuxad.de", "dunk.dnsbl.tuxad.de",
+	"dul.blackhole.cantv.net", "hog.blackhole.cantv.net", "rhsbl.blackhole.cantv.net", "rot.blackhole.cantv.net",
+	"spam.blackhole.cantv.net", "dnsbl1.dnsbl.borderware.com", "dnsbl2.dnsbl.borderware.com", "dnsbl3.dnsbl.borderware.com",
+	"safe.dnsbl.prs.proofpoint.com", "rbl.tdk.net", "rbl.choon.net", "rwl.choon.net", "ipv6.rbl.choon.net", "ipv6.rwl.choon.net",
+	"rbl.zenon.net", "dbl.tiopan.com", "bl.tiopan.com"}
+
+var brokenLists = []string{"dnsbl.rizon.net", "rbl.interserver.net", "dnsbl.beetjevreemd.nl", "bl.emailbasura.org",
+	"bl.spamcannibal.org"}
 
 func parseCVS() []*ListItem {
 	lists := []*ListItem{}
@@ -53,8 +60,15 @@ ListLoop:
 			continue
 		}
 
-		// remove private lists that don't work for public
+		// remove private DNSBLs that don't work for public
 		for _, v := range privateLists {
+			if item.Address == v {
+				continue ListLoop
+			}
+		}
+
+		// remove broken DNSBLs that don't respond
+		for _, v := range brokenLists {
 			if item.Address == v {
 				continue ListLoop
 			}
