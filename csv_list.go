@@ -14,7 +14,7 @@ var privateLists = []string{"(hidden)", "blackholes.scconsult.com", "hartkore.dn
 	"rbl.zenon.net", "dbl.tiopan.com", "bl.tiopan.com"}
 
 var brokenLists = []string{"dnsbl.rizon.net", "rbl.interserver.net", "dnsbl.beetjevreemd.nl", "bl.emailbasura.org",
-	"bl.spamcannibal.org"}
+	"bl.spamcannibal.org", "rbl.iprange.net"}
 
 func parseCVS() []*ListItem {
 	lists := []*ListItem{}
