@@ -122,6 +122,10 @@ func lookupIP4(ip string, list *ListItem) (bool, error) {
 	}
 
 	if len(ips) > 0 {
+		_, subNet, _ := net.ParseCIDR("127.0.0.0/8")
+		if !subNet.Contains(ips[0]) {
+			return false, fmt.Errorf("Response is outside 127.0.0.0/8")
+		}
 		return true, nil
 	}
 
