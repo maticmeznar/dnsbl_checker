@@ -23,9 +23,13 @@ var (
 	cfgIP4       = ip4Cmd.Arg("ip", "IP address to check").Required().String()
 	// ip6Cmd       = app.Command("ip6", "checks IPv6 address against DNSBLs")
 	// cfgIP6       = ip6Cmd.Arg("ip", "IP address to check").Required().String()
-	domainCmd = app.Command("domain", "checks a domain against DNSBLs")
-	cfgDomain = domainCmd.Arg("domain", "domain name to check").Required().String()
-	version   = "0.2"
+	domainCmd          = app.Command("domain", "checks a domain against DNSBLs")
+	cfgDomain          = domainCmd.Arg("domain", "domain name to check").Required().String()
+	version            = "0.2"
+	ErrWrongResponse   = fmt.Errorf("RBL returned a response outside of 127.0.0.0/8 subnet")
+	ErrRBLPositiveFail = fmt.Errorf("RBL failed positive check")
+	ErrRBLNegativeFail = fmt.Errorf("RBL failed negative check")
+	ErrRBLFail         = fmt.Errorf("RBL failed both checks")
 )
 
 // ListItem is a struct with list details
@@ -114,9 +118,8 @@ func CheckDomain(whitelist bool, domain string, allLists []*ListItem) {
 // lookupIP4 returns true if `ip` is listed, false otherwise
 func lookupIP4(ip string, list *ListItem) (bool, error) {
 	// check RBL health before using it
-	if !checkIP4Health(list.Address) {
-		fmt.Printf("%v : ERROR\n", list.Address)
-		return false, fmt.Errorf("RBL is not working properly")
+	if err := checkIP4Health(list.Address); err != nil {
+		return false, err
 	}
 
 	stringyIP := strings.Split(ip, ".")
@@ -130,7 +133,7 @@ func lookupIP4(ip string, list *ListItem) (bool, error) {
 	if len(ips) > 0 {
 		_, subNet, _ := net.ParseCIDR("127.0.0.0/8")
 		if !subNet.Contains(ips[0]) {
-			return false, fmt.Errorf("Response is outside 127.0.0.0/8")
+			return false, ErrWrongResponse
 		}
 		return true, nil
 	}
@@ -188,7 +191,7 @@ func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListI
 					out = fmt.Sprintf("%v : TIMEOUT\n", v.Address)
 					counterTimeouts <- true
 				} else {
-					out = fmt.Sprintf("%v : FAILURE\n", v.Address)
+					out = fmt.Sprintf("%v : FAILURE: %v\n", v.Address, err)
 					counterFailures <- true
 				}
 				if *cfgVerbose {
@@ -229,7 +232,7 @@ func isStringInSlice(needle string, haystrack []string) bool {
 
 // checkIP4Health returns true if `list` is healthy. Returns false otherwise.
 // Test specification: https://tools.ietf.org/html/rfc5782#page-7
-func checkIP4Health(list string) bool {
+func checkIP4Health(list string) error {
 	testNegative := func(list string) bool {
 		ips, err := net.LookupHost("1.0.0.127" + "." + list)
 		if len(ips) == 0 && strings.HasSuffix(err.Error(), "no such host") {
@@ -246,11 +249,18 @@ func checkIP4Health(list string) bool {
 		return false
 	}
 
-	if testNegative(list) && testPositive(list) {
-		return true
+	negResult := testNegative(list)
+	posResult := testPositive(list)
+
+	if !negResult && !posResult {
+		return ErrRBLFail
+	} else if negResult && !posResult {
+		return ErrRBLPositiveFail
+	} else if !negResult && posResult {
+		return ErrRBLNegativeFail
 	}
 
-	return false
+	return nil
 }
 
 // checkDomainHealth returns true if `list` is healthy. Returns false otherwise.
