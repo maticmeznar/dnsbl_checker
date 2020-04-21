@@ -113,6 +113,12 @@ func CheckDomain(whitelist bool, domain string, allLists []*ListItem) {
 
 // lookupIP4 returns true if `ip` is listed, false otherwise
 func lookupIP4(ip string, list *ListItem) (bool, error) {
+	// check RBL health before using it
+	if !checkIP4Health(list.Address) {
+		fmt.Printf("%v : ERROR\n", list.Address)
+		return false, fmt.Errorf("RBL is not working properly")
+	}
+
 	stringyIP := strings.Split(ip, ".")
 	addr := stringyIP[3] + "." + stringyIP[2] + "." + stringyIP[1] + "." + stringyIP[0] + "." + list.Address
 
@@ -210,6 +216,32 @@ func isStringInSlice(needle string, haystrack []string) bool {
 		if needle == v {
 			return true
 		}
+	}
+
+	return false
+}
+
+// checkIP4Health returns true if `list` is healthy. Returns false otherwise.
+// Test specification: https://tools.ietf.org/html/rfc5782#page-7
+func checkIP4Health(list string) bool {
+	testNegative := func(list string) bool {
+		ips, err := net.LookupHost("1.0.0.127" + "." + list)
+		if len(ips) == 0 && strings.HasSuffix(err.Error(), "no such host") {
+			return true
+		}
+		return false
+	}
+
+	testPositive := func(list string) bool {
+		ips, err := net.LookupHost("2.0.0.127" + "." + list)
+		if len(ips) > 0 && err == nil {
+			return true
+		}
+		return false
+	}
+
+	if testNegative(list) && testPositive(list) {
+		return true
 	}
 
 	return false
