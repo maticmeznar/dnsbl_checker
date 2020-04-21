@@ -140,6 +140,12 @@ func lookupIP4(ip string, list *ListItem) (bool, error) {
 
 // lookupDomain returns true if `domain` is listed, false otherwise
 func lookupDomain(domain string, list *ListItem) (bool, error) {
+	// check RBL health before using it
+	if !checkDomainHealth(list.Address) {
+		fmt.Printf("%v : ERROR\n", list.Address)
+		return false, fmt.Errorf("RBL is not working properly")
+	}
+
 	addrs, err := net.LookupHost(domain + "." + list.Address)
 	if err != nil {
 		return false, err
@@ -234,6 +240,32 @@ func checkIP4Health(list string) bool {
 
 	testPositive := func(list string) bool {
 		ips, err := net.LookupHost("2.0.0.127" + "." + list)
+		if len(ips) > 0 && err == nil {
+			return true
+		}
+		return false
+	}
+
+	if testNegative(list) && testPositive(list) {
+		return true
+	}
+
+	return false
+}
+
+// checkDomainHealth returns true if `list` is healthy. Returns false otherwise.
+// Test specification: https://tools.ietf.org/html/rfc5782#page-7
+func checkDomainHealth(list string) bool {
+	testNegative := func(list string) bool {
+		ips, err := net.LookupHost("INVALID" + "." + list)
+		if len(ips) == 0 && strings.HasSuffix(err.Error(), "no such host") {
+			return true
+		}
+		return false
+	}
+
+	testPositive := func(list string) bool {
+		ips, err := net.LookupHost("TEST" + "." + list)
 		if len(ips) > 0 && err == nil {
 			return true
 		}
