@@ -19,3 +19,6 @@ dist/
 
 # Vendoring dir
 vendor/
+
+# crap
+result*.txt
