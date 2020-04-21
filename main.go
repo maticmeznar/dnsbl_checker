@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	valid "github.com/asaskevich/govalidator"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -19,7 +17,7 @@ var (
 	cfgWhitelist = app.Flag("whitelist", "Check whitelists instead of blacklists").Bool()
 	cfgVerbose   = app.Flag("verbose", "More verbose output. Output will include misses, timeouts and failures.").Bool()
 	cfgExclude   = app.Flag("exclude", "List of DNSBLs to exclude from the check. This flag can be specified multiple times.").PlaceHolder("bl.example.com").Strings()
-	cfgSpeed     = app.Flag("speed", "number of checks per second between 1 (min) and 1000 (max)").Default("20").Int()
+	cfgThreads   = app.Flag("threads", "number of concurrent checks between 1 (min) and 1000 (max)").Default("10").Int()
 	cfgIP4       = ip4Cmd.Arg("ip", "IP address to check").Required().String()
 	// ip6Cmd       = app.Command("ip6", "checks IPv6 address against DNSBLs")
 	// cfgIP6       = ip6Cmd.Arg("ip", "IP address to check").Required().String()
@@ -48,6 +46,19 @@ type ListItem struct {
 	Blacklist bool
 	// Whitelist is true if this list is a whitelist
 	Whitelist bool
+}
+
+type workUnit struct {
+	// address is the hostname used for checking
+	address string
+	// listItem is the ListItem
+	listItem *ListItem
+
+	counterHits     chan bool
+	counterMisses   chan bool
+	counterTimeouts chan bool
+	counterFailures chan bool
+	lookupFunc      func(string, *ListItem) (bool, error)
 }
 
 func main() {
@@ -161,52 +172,74 @@ func lookupDomain(domain string, list *ListItem) (bool, error) {
 	return false, nil
 }
 
-func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListItem) (bool, error)) {
-	wg := sync.WaitGroup{}
-	counterHits := make(chan bool, len(lists))
-	counterMisses := make(chan bool, len(lists))
-	counterTimeouts := make(chan bool, len(lists))
-	counterFailures := make(chan bool, len(lists))
-	counterChecks := 0
-
-	sleep := 1000 / *cfgSpeed
-	d, err := time.ParseDuration(strconv.Itoa(sleep) + "ms")
-	if err != nil {
-		panic(err)
-	}
-	ticker := time.Tick(d)
-
-	for _, v := range lists {
-		wg.Add(1)
-		counterChecks++
-		go func(address string, v *ListItem) {
-			<-ticker
-			result, err := lookupFunc(address, v)
+func worker(wg *sync.WaitGroup, ch chan *workUnit, done chan bool) {
+	wg.Add(1)
+	for {
+		select {
+		case <-done:
+			wg.Done()
+			return
+		case wu := <-ch:
+			result, err := wu.lookupFunc(wu.address, wu.listItem)
 			if err != nil {
 				var out string
 				if strings.HasSuffix(err.Error(), "no such host") {
-					out = fmt.Sprintf("%v : MISS\n", v.Address)
-					counterMisses <- true
+					out = fmt.Sprintf("%v : MISS\n", wu.listItem.Address)
+					wu.counterMisses <- true
 				} else if strings.HasSuffix(err.Error(), "i/o timeout") {
-					out = fmt.Sprintf("%v : TIMEOUT\n", v.Address)
-					counterTimeouts <- true
+					out = fmt.Sprintf("%v : TIMEOUT\n", wu.listItem.Address)
+					wu.counterTimeouts <- true
 				} else {
-					out = fmt.Sprintf("%v : FAILURE: %v\n", v.Address, err)
-					counterFailures <- true
+					out = fmt.Sprintf("%v : FAILURE: %v\n", wu.listItem.Address, err)
+					wu.counterFailures <- true
 				}
 				if *cfgVerbose {
 					fmt.Printf("%v", out)
 				}
 			}
 			if result {
-				fmt.Printf("%v : HIT\n", v.Address)
-				counterHits <- true
+				fmt.Printf("%v : HIT\n", wu.listItem.Address)
+				wu.counterHits <- true
 			}
-			wg.Done()
-		}(address, v)
+
+		}
 	}
 
+}
+
+func runChecks(address string, lists []*ListItem, lookupFunc func(string, *ListItem) (bool, error)) {
+	wg := &sync.WaitGroup{}
+	counterHits := make(chan bool, len(lists))
+	counterMisses := make(chan bool, len(lists))
+	counterTimeouts := make(chan bool, len(lists))
+	counterFailures := make(chan bool, len(lists))
+	counterChecks := 0
+	workChan := make(chan *workUnit)
+	workDone := make(chan bool)
+
+	for i := 1; i <= *cfgThreads; i++ {
+		go worker(wg, workChan, workDone)
+	}
+
+	for _, listItem := range lists {
+		counterChecks++
+
+		wu := &workUnit{
+			address:         address,
+			listItem:        listItem,
+			counterFailures: counterFailures,
+			counterHits:     counterHits,
+			counterMisses:   counterMisses,
+			counterTimeouts: counterTimeouts,
+			lookupFunc:      lookupFunc,
+		}
+
+		workChan <- wu
+	}
+
+	close(workDone)
 	wg.Wait()
+
 	numListed := len(counterHits)
 
 	fmt.Printf("------------------------------------------------\n")
