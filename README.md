@@ -15,3 +15,6 @@ DNSBL is also known as RBL or DNS blacklist.
 - IPv6 is not supported because it's mostly useless in DNSBL context. Best solution is to not bind your SMTP server to an IPv6 address, so you cannot receive any email from IPv6 sources.
 
 This checker uses DNSBL list from http://multirbl.valli.org/list/. HTML source of the table is used to create a CSV list using http://www.convertcsv.com/html-table-to-csv.htm or https://conversiontools.io/convert_html_to_csv/.
+
+## Additional resources
+- https://tools.ietf.org/html/rfc5782#page-7
